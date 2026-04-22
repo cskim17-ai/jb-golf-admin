@@ -8,6 +8,7 @@ import { motion, Reorder, AnimatePresence } from 'framer-motion';
 interface GalleryPhoto {
   id: string;
   url: string;
+  thumb_url?: string;
   caption?: string;
   order?: number;
   createdAt?: any;
@@ -63,6 +64,7 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
                 id: photoDoc.id,
                 url: photoDoc.data().url || '',
                 caption: photoDoc.data().caption || '',
+                thumb_url: photoDoc.data().thumb_url || '',
                 order: photoDoc.data().order || 0,
                 createdAt: photoDoc.data().createdAt
               })).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -177,9 +179,12 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
       const photoId = `photo_${Date.now()}`;
       const maxOrder = Math.max(...photos.map(p => p.order || 0), -1);
       
+      const isThumb = newPhotoUrl.split('/').pop()?.startsWith('thumb_');
+      
       // 서브컬렉션에 사진 추가
       await setDoc(doc(db, 'gallery', topicId, 'photos', photoId), {
-        url: newPhotoUrl,
+        url: isThumb ? '' : newPhotoUrl,
+        thumb_url: isThumb ? newPhotoUrl : '',
         caption: newPhotoCaption,
         order: maxOrder + 1,
         createdAt: serverTimestamp()
@@ -274,47 +279,80 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
 
     try {
       const photos = photosByTopic[topicId] || [];
-      let maxOrder = Math.max(...photos.map(p => p.order || 0), -1);
-      let uploadedCount = 0;
-
+      const maxOrderStart = Math.max(...photos.map(p => p.order || 0), -1);
+      
       // 업로드 진행 상태 초기화
       setUploadProgress({ ...uploadProgress, [topicId]: { current: 0, total: files.length } });
 
-      // 파일을 순차적으로 처리
+      // 파일을 베이스 파일명으로 그룹화
+      // abc.webp와 thumb_abc.webp를 하나의 그룹으로 묶음
+      const fileGroups: { [key: string]: { original?: File; thumb?: File } } = {};
+      
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        const fileName = file.name;
+        const isThumb = fileName.startsWith('thumb_');
+        const baseName = isThumb ? fileName.substring(6) : fileName;
         
-        // FileReader를 Promise로 변환
-        const base64String = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+        if (!fileGroups[baseName]) fileGroups[baseName] = {};
+        if (isThumb) {
+          fileGroups[baseName].thumb = file;
+        } else {
+          fileGroups[baseName].original = file;
+        }
+      }
+
+      const baseNames = Object.keys(fileGroups);
+      let processedFilesCount = 0;
+      let currentMaxOrder = maxOrderStart;
+
+      for (let i = 0; i < baseNames.length; i++) {
+        const baseName = baseNames[i];
+        const group = fileGroups[baseName];
+        
+        let url = '';
+        let thumb_url = '';
+
+        if (group.original) {
+          url = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(group.original!);
+          });
+          processedFilesCount++;
+          setUploadProgress(prev => ({ ...prev, [topicId]: { current: processedFilesCount, total: files.length } }));
+        }
+
+        if (group.thumb) {
+          thumb_url = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(group.thumb!);
+          });
+          processedFilesCount++;
+          setUploadProgress(prev => ({ ...prev, [topicId]: { current: processedFilesCount, total: files.length } }));
+        }
 
         const photoId = `photo_${Date.now()}_${i}`;
-        maxOrder++;
+        currentMaxOrder++;
         
-        // 각 파일을 개별적으로 저장 (배치 대신 개별 저장)
         await setDoc(doc(db, 'gallery', topicId, 'photos', photoId), {
-          url: base64String,
+          url: url,
+          thumb_url: thumb_url,
           caption: '',
-          order: maxOrder,
+          order: currentMaxOrder,
           createdAt: serverTimestamp()
         });
 
-        uploadedCount++;
-        
-        // 진행 상태 업데이트
-        setUploadProgress(prev => ({ ...prev, [topicId]: { current: uploadedCount, total: files.length } }));
-        
-        // 과부하 방지를 위해 100ms 지연
-        if (i < files.length - 1) {
+        // 과부하 방지
+        if (i < baseNames.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
-      showAlert(`${uploadedCount}개의 사진이 추가되었습니다.`);
+      showAlert(`${baseNames.length} 그룹의 사진이 추가되었습니다.`);
       // 파일 입력 초기화
       if (fileInputRefs.current[topicId]) {
         fileInputRefs.current[topicId]!.value = '';
@@ -661,9 +699,9 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
                           </div>
 
                           {/* Photo Preview */}
-                          <div className="flex-shrink-0 cursor-pointer group/img" onClick={() => setPreviewImage(photo.url)}>
+                          <div className="flex-shrink-0 cursor-pointer group/img" onClick={() => setPreviewImage(photo.url || photo.thumb_url || '')}>
                             <img 
-                              src={photo.url} 
+                              src={photo.thumb_url || photo.url} 
                               alt={photo.caption || '사진'} 
                               className="w-24 h-24 object-cover rounded-lg border border-white/20 group-hover/img:border-lime group-hover/img:scale-[1.02] transition-all"
                               referrerPolicy="no-referrer"

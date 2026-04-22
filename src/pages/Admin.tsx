@@ -217,7 +217,12 @@ export default function Admin() {
   const [isPasswordVerified, setIsPasswordVerified] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [failedAttempts, setFailedAttempts] = useState(0);
-  const [accessConfig, setAccessConfig] = useState<{adminPassword?: string, allowedUsers?: string[]}>({});
+  const [accessConfig, setAccessConfig] = useState<{
+    adminPassword?: string, 
+    googleLoginPassword?: string, 
+    directBypassPassword?: string, 
+    allowedUsers?: string[]
+  }>({});
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -244,25 +249,29 @@ export default function Admin() {
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetPassword = accessConfig.adminPassword || '9175938';
     
-    // 5938 입력 시 즉시 메인 화면으로 이동 (로그인 건너뜀)
-    if (passwordInput === '5938') {
+    // Firestore에서 가져온 비밀번호 설정 사용
+    const directBypassPassword = accessConfig.directBypassPassword;
+    const googleLoginPassword = accessConfig.googleLoginPassword;
+    const targetPassword = accessConfig.adminPassword;
+    
+    // 1. 직접 통과 비밀번호 (로그인 건너뜀)
+    if (directBypassPassword && passwordInput === directBypassPassword) {
       setIsPasswordVerified(true);
       setUser({ email: 'master@jb-golf.local', displayName: '마스터 관리자' } as any);
       setFailedAttempts(0);
       return;
     }
 
-    // 9175938 입력 시 구글 로그인 창 활성화
-    if (passwordInput === '9175938') {
+    // 2. 구글 로그인 활성화 비밀번호
+    if (googleLoginPassword && passwordInput === googleLoginPassword) {
       setIsPasswordVerified(true);
       setFailedAttempts(0);
       return;
     }
 
-    // 그 외 비밀번호 처리 (기존 로직 유지)
-    if (passwordInput === targetPassword) {
+    // 3. 그 외 비밀번호 처리 (기존 adminPassword 필드 호환용)
+    if (targetPassword && passwordInput === targetPassword) {
       setIsPasswordVerified(true);
       setFailedAttempts(0);
     } else {

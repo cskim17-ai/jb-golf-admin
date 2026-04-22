@@ -49,6 +49,8 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
   const [adminTabs, setAdminTabs] = useState<TabConfig[]>(ADMIN_TABS);
   const [clientTabs, setClientTabs] = useState<TabConfig[]>(CLIENT_TABS);
   const [adminPassword, setAdminPassword] = useState('');
+  const [googleLoginPassword, setGoogleLoginPassword] = useState('9175938');
+  const [directBypassPassword, setDirectBypassPassword] = useState('5938');
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -95,6 +97,8 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
         if (accessSnap.exists()) {
           const data = accessSnap.data();
           setAdminPassword(data.adminPassword || '');
+          setGoogleLoginPassword(data.googleLoginPassword || '9175938');
+          setDirectBypassPassword(data.directBypassPassword || '5938');
           setAllowedUsers(data.allowedUsers || []);
         } else {
           setAllowedUsers([]);
@@ -133,6 +137,8 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
     try {
       await setDoc(doc(db, 'settings', 'accessConfig'), {
         adminPassword,
+        googleLoginPassword,
+        directBypassPassword,
         allowedUsers,
         updatedAt: new Date().toISOString()
       });
@@ -255,10 +261,42 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
       {activeMode === 'access' ? (
         <div className="space-y-6">
           <div className="glass p-6 rounded-2xl border border-white/5 space-y-6">
-            <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-sm font-bold text-lime">
+                  <Lock size={16} />
+                  1. 직접 통과 비밀번호 (bypass)
+                </label>
+                <input
+                  type="password"
+                  value={directBypassPassword}
+                  onChange={(e) => setDirectBypassPassword(e.target.value)}
+                  placeholder="예: 5938"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-lime outline-none transition-all"
+                />
+                <p className="text-[10px] opacity-40">입력 시 즉시 마스터 권한으로 입장합니다.</p>
+              </div>
+
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-sm font-bold text-lime">
+                  <Lock size={16} />
+                  2. 구글 로그인 활성화 비밀번호
+                </label>
+                <input
+                  type="password"
+                  value={googleLoginPassword}
+                  onChange={(e) => setGoogleLoginPassword(e.target.value)}
+                  placeholder="예: 9175938"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-lime outline-none transition-all"
+                />
+                <p className="text-[10px] opacity-40">입력 시 구글 로그인 창이 나타납니다.</p>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/5">
               <label className="flex items-center gap-2 text-sm font-bold text-lime mb-4">
                 <Lock size={16} />
-                관리자 접속 비밀번호
+                관리자 접속 비밀번호 (기본)
               </label>
               <div className="flex gap-4">
                 <input
@@ -274,7 +312,7 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
                   className="px-6 bg-lime text-forest rounded-xl font-bold hover:shadow-[0_0_15px_rgba(163,230,53,0.3)] transition-all flex items-center gap-2"
                 >
                   <Save size={16} />
-                  비밀번호 저장
+                  설정 저장
                 </button>
               </div>
             </div>

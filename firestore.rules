@@ -22,7 +22,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 2. 전체 데이터베이스 기본 규칙 (Fallback)
+    // 2. 설정(settings) 컬렉션 관리
+    // 비밀번호 게이트 통과를 위해 읽기는 허용하되, 수정은 관리자만 가능
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 3. 전체 데이터베이스 기본 규칙 (Fallback)
     // 테스트 및 서비스 조회를 위해 읽기는 허용하되, 데이터 변경(쓰기)은 관리자만 가능하도록 통제
     match /{document=**} {
       allow read: if true;
