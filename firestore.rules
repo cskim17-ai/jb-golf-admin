@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // [헬퍼 함수]
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // 고객님의 이메일 또는 UID를 통해 관리자 권한을 확인합니다.
+      return isAuthenticated() &&
+        (request.auth.token.email == "cskim1747@gmail.com" ||
+         request.auth.uid == "3H9K9FXktGgDrxEkm6zqzGWoaxf1");
+    }
+
+    // 1. active_sessions 컬렉션 (실험실 화면 전송용)
+    // 화면 표시용(srch-view.html)이므로 누구나 읽을 수 있지만, 전송(쓰기)은 관리자만 가능
+    match /active_sessions/{deskId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 2. 전체 데이터베이스 기본 규칙 (Fallback)
+    // 테스트 및 서비스 조회를 위해 읽기는 허용하되, 데이터 변경(쓰기)은 관리자만 가능하도록 통제
+    match /{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

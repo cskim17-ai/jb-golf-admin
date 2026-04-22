@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>도서 위치 안내</title>
+  <style>
+    body { 
+      font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; 
+      margin: 0; 
+      padding: 0; 
+      background: #f0f0f0; 
+      display: flex; 
+      justify-content: center; 
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+    #receipt-container { 
+      background: white; 
+      width: 100%; 
+      max-width: 400px; 
+      min-height: 100vh; 
+      padding: 20px; 
+      box-sizing: border-box; 
+      box-shadow: 0 0 15px rgba(0,0,0,0.1); 
+      display: flex;
+      flex-direction: column;
+    }
+    #content { 
+      width: 100%; 
+      flex-grow: 1;
+    }
+    .close-btn-wrapper { 
+      text-align: center; 
+      margin-top: 30px; 
+      margin-bottom: 20px;
+    }
+    .close-btn { 
+      background: #a0a0a0; 
+      color: white; 
+      border: 2px solid #555; 
+      padding: 12px 60px; 
+      font-size: 16px; 
+      font-weight: bold; 
+      border-radius: 8px; 
+      cursor: pointer; 
+      transition: background 0.2s;
+    }
+    .close-btn:hover {
+      background: #888;
+    }
+    #loading { 
+      text-align: center; 
+      padding: 50px; 
+      color: #666; 
+      font-size: 15px;
+    }
+    .spinner { 
+      border: 4px solid #f3f3f3; 
+      border-top: 4px solid #27ae60; 
+      border-radius: 50%; 
+      width: 40px; 
+      height: 40px; 
+      animation: spin 1s linear infinite; 
+      margin: 0 auto 20px; 
+    }
+    @keyframes spin { 
+      0% { transform: rotate(0deg); } 
+      100% { transform: rotate(360deg); } 
+    }
+  </style>
+</head>
+<body>
+  <div id="receipt-container">
+    <div id="loading">
+      <div class="spinner"></div>
+      도서 위치 정보를 불러오는 중입니다...
+    </div>
+    
+    <!-- Firestore에서 받아온 HTML이 여기에 렌더링됩니다 -->
+    <div id="content" style="display: none;"></div>
+    
+    <div class="close-btn-wrapper" id="close-wrapper" style="display: none;">
+      <button class="close-btn" onclick="window.close()">닫기</button>
+    </div>
+  </div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    
+    // Firebase 설정 - 환경 변수에서 가져오기
+    const firebaseConfig = {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: import.meta.env.VITE_FIREBASE_APP_ID,
+      measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    
+    // URL에서 desk_id 파라미터 추출 (기본값 desk_1)
+    const urlParams = new URLSearchParams(window.location.search);
+    const deskId = urlParams.get('desk_id') || 'desk_1';
+    
+    // Firestore의 active_sessions/{deskId} 문서 실시간 감시
+    const docRef = doc(db, "active_sessions", deskId);
+    
+    onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        document.getElementById('loading').style.display = 'none';
+        
+        if (data.content) {
+          document.getElementById('content').style.display = 'block';
+          document.getElementById('content').innerHTML = data.content;
+          document.getElementById('close-wrapper').style.display = 'block';
+        } else if (data.url) {
+          // content가 없으면 url로 iframe 생성
+          document.getElementById('content').style.display = 'block';
+          document.getElementById('content').innerHTML = `<iframe src="${data.url}" style="width:100%; height:100%; border:none;"></iframe>`;
+          document.getElementById('close-wrapper').style.display = 'block';
+        } else {
+          document.getElementById('loading').style.display = 'block';
+          document.getElementById('loading').innerHTML = "표시할 도서 위치 정보가 없습니다.";
+          document.getElementById('content').style.display = 'none';
+          document.getElementById('close-wrapper').style.display = 'none';
+        }
+      } else {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('loading').innerHTML = "대기 중...<br>관리자가 도서 정보를 전송하면 화면이 바뀝니다.";
+        document.getElementById('content').style.display = 'none';
+        document.getElementById('close-wrapper').style.display = 'none';
+      }
+    }, (error) => {
+      console.error("Firestore 오류:", error);
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('loading').innerHTML = "Firestore 연결 오류가 발생했습니다.";
+    });
+  </script>
+</body>
+</html>
