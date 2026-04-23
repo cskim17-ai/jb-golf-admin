@@ -216,11 +216,11 @@ export default function AdminBooking({ showAlert, showConfirm }: AdminBookingPro
               onChange={(e) => setFilterStatus(e.target.value)}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 w-full focus:border-lime outline-none transition-all text-white cursor-pointer"
             >
-              <option value="all">전체</option>
-              <option value="접수확인">접수확인</option>
-              <option value="답변완료">답변완료</option>
-              <option value="견적확정">견적확정</option>
-              <option value="입금완료">입금완료</option>
+              <option value="all" className="bg-forest text-white">전체</option>
+              <option value="접수확인" className="bg-forest text-white">접수확인</option>
+              <option value="답변완료" className="bg-forest text-white">답변완료</option>
+              <option value="견적확정" className="bg-forest text-white">견적확정</option>
+              <option value="입금완료" className="bg-forest text-white">입금완료</option>
             </select>
           </div>
         </div>
@@ -311,11 +311,11 @@ export default function AdminBooking({ showAlert, showConfirm }: AdminBookingPro
                       <select 
                         value={booking.status || '접수확인'}
                         onChange={(e) => handleStatusChange(booking.id, e.target.value)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border-0 outline-none transition-all ${
-                          booking.status === '입금완료' ? 'bg-lime text-forest' :
-                          booking.status === '견적확정' ? 'bg-yellow-400 text-forest' :
-                          booking.status === '답변완료' ? 'bg-blue-400 text-forest' :
-                          'bg-white text-forest'
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border outline-none transition-all ${
+                          booking.status === '입금완료' ? 'bg-lime text-forest border-lime' :
+                          booking.status === '견적확정' ? 'bg-yellow-400 text-forest border-yellow-400' :
+                          booking.status === '답변완료' ? 'bg-blue-400 text-forest border-blue-400' :
+                          'bg-forest text-white border-white/20'
                         }`}
                       >
                         <option value="접수확인" className="bg-forest text-white">접수확인</option>
