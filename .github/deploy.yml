@@ -1,0 +1,37 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # 수동 실행 가능하도록 설정
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    # Node.js 20 지원 종료 경고를 해결하기 위한 환경 변수 설정
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # 현재 안정적인 최신 LTS 버전인 22 또는 24 권장
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      # 이후 배포 단계 (GitHub Pages 또는 Firebase 등 설정에 맞게 유지)
+      # 예시: GitHub Pages 배포인 경우
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
