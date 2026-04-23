@@ -30,6 +30,7 @@ const ADMIN_TABS: TabConfig[] = [
   { id: 'chatting', label: '채팅정보관리' },
   { id: 'lab', label: '실험실' },
   { id: 'menuSettings', label: '사용자 설정' },
+  { id: 'faqs', label: 'FAQ 관리' },
   { id: 'accessControl', label: '접속 권한 관리' }
 ];
 

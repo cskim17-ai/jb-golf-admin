@@ -131,8 +131,8 @@ export default function AdminPhotoProcessor({ showAlert }: AdminPhotoProcessorPr
           blob: thumbBlob
         });
 
-        // 2. 원본 축소 (1200x1200px, 100KB 이내)
-        const mainBlob = await resizeAndConvert(bitmap, 1200, 1200, 0.7);
+        // 2. 원본 축소 (1200x1200px, 500KB 이내)
+        const mainBlob = await resizeAndConvert(bitmap, 1200, 1200, 0.8);
         processedResults.push({
           originalName: imgFile.name,
           newName: `${imgFile.name.split('.')[0]}.webp`,
@@ -250,7 +250,7 @@ export default function AdminPhotoProcessor({ showAlert }: AdminPhotoProcessorPr
         <ul className="text-sm space-y-1.5 opacity-80 list-disc ml-5">
           <li>JPG, JPEG, PNG 파일만 선택됩니다</li>
           <li>썸네일: 300x300px, 약 10~20KB, WebP (파일명 앞에 <span className="text-lime font-bold">thumb_</span> 추가)</li>
-          <li>원본 축소: 1200x1200px, 100KB 이내, WebP (파일명 유지)</li>
+          <li>원본 축소: 1200x1200px, 500KB 이내, WebP (파일명 유지)</li>
           <li>변환된 파일은 ZIP 압축하여 다운로드됩니다</li>
         </ul>
       </div>

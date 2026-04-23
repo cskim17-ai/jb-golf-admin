@@ -320,9 +320,13 @@ export default function AdminVideoGallery({ showAlert, showConfirm }: AdminVideo
               onChange={(e) => setVideoTopicFilter(e.target.value)}
               className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm focus:border-lime outline-none transition-all text-white min-w-[200px]"
             >
-              <option value="all" className="bg-forest">전체</option>
+              <option value="all" className="bg-forest">
+                전체 ({Object.values(videosByTopic).reduce((acc, curr) => acc + curr.length, 0)})
+              </option>
               {videoTopics.map(topic => (
-                <option key={topic.id} value={topic.id} className="bg-forest">{topic.title}</option>
+                <option key={topic.id} value={topic.id} className="bg-forest">
+                  {topic.title} ({videosByTopic[topic.id]?.length || 0})
+                </option>
               ))}
             </select>
           </div>

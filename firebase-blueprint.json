@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "faq": {
+      "title": "FAQ",
+      "description": "자주 묻는 질문 데이터 모델",
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "카테고리 (예약/결제, 골프장 정보, 교통/숙박, 서비스 이용, 기타)",
+          "enum": ["예약/결제", "골프장 정보", "교통/숙박", "서비스 이용", "기타"]
+        },
+        "question": {
+          "type": "string",
+          "description": "질문 내용"
+        },
+        "answer": {
+          "type": "string",
+          "description": "답변 텍스트"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "첨부 이미지 public URL"
+        },
+        "imageAlt": {
+          "type": "string",
+          "description": "이미지 설명"
+        },
+        "order": {
+          "type": "number",
+          "description": "노출 우선순위"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "활성화 상태"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "생생일"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "수정일"
+        }
+      },
+      "required": ["category", "question", "answer", "order", "isActive"]
+    }
+  },
+  "firestore": {
+    "faqs/{faqId}": {
+      "schema": "faq",
+      "description": "FAQ 목록"
+    },
+    "settings/accessConfig": {
+      "schema": "accessConfig",
+      "description": "접속 권한 및 관리자 이메일 목록"
+    },
+    "settings/menuConfig": {
+      "schema": "menuConfig",
+      "description": "관리자 메뉴 순서 설정"
+    }
+  }
+}

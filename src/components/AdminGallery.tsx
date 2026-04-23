@@ -1,7 +1,8 @@
-import { Plus, Trash2, Upload, ImageIcon, Download, GripVertical, X } from 'lucide-react';
+import { Plus, Trash2, Upload, ImageIcon, Download, GripVertical, X, Loader2 } from 'lucide-react';
 import { useRef } from 'react';
 import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useState, useEffect } from 'react';
 import { motion, Reorder, AnimatePresence } from 'framer-motion';
 
@@ -168,34 +169,64 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
     }
   };
 
-  const addPhoto = async (topicId: string) => {
-    if (!newPhotoUrl.trim()) {
-      showAlert('이미지 URL을 입력해주세요.');
+  const addPhoto = async (topicId: string, file?: File) => {
+    if (!file && !newPhotoUrl.trim()) {
+      showAlert('이미지 URL을 입력하거나 파일을 선택해주세요.');
       return;
     }
 
+    setUploading(prev => ({ ...prev, [topicId]: { current: 0, total: 1 } }));
+
     try {
       const photos = photosByTopic[topicId] || [];
-      const photoId = `photo_${Date.now()}`;
+      let url = newPhotoUrl;
+      let thumb_url = '';
+      let fileName = file ? file.name : (newPhotoUrl.split('/').pop() || `photo_${Date.now()}`);
+      
+      if (file) {
+        const uniqueFileName = `${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, `gallery/${uniqueFileName}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        url = await getDownloadURL(snapshot.ref);
+      }
+
+      const isThumb = fileName.startsWith('thumb_');
+      const baseName = isThumb ? fileName.substring(6) : fileName;
+      const photoId = baseName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      
       const maxOrder = Math.max(...photos.map(p => p.order || 0), -1);
       
-      const isThumb = newPhotoUrl.split('/').pop()?.startsWith('thumb_');
-      
-      // 서브컬렉션에 사진 추가
-      await setDoc(doc(db, 'gallery', topicId, 'photos', photoId), {
-        url: isThumb ? '' : newPhotoUrl,
-        thumb_url: isThumb ? newPhotoUrl : '',
-        caption: newPhotoCaption,
-        order: maxOrder + 1,
-        createdAt: serverTimestamp()
-      });
+      const photoDocRef = doc(db, 'gallery', topicId, 'photos', photoId);
+      const photoDocSnap = await getDocs(collection(db, 'gallery', topicId, 'photos'));
+      const existingPhoto = photoDocSnap.docs.find(d => d.id === photoId);
 
-      showAlert('사진이 추가되었습니다.');
+      if (existingPhoto) {
+        await updateDoc(photoDocRef, {
+          [isThumb ? 'thumb_url' : 'url']: url,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await setDoc(photoDocRef, {
+          url: isThumb ? '' : url,
+          thumb_url: isThumb ? url : '',
+          caption: newPhotoCaption,
+          order: maxOrder + 1,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      showAlert('사진 정보가 업데이트되었습니다.');
       setNewPhotoUrl('');
       setNewPhotoCaption('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Add photo error:', error);
-      showAlert('사진 추가 중 오류가 발생했습니다.');
+      if (error.code === 'storage/unauthorized') {
+        showAlert('사진 업로드 권한이 없습니다. Firebase Console에서 Storage 보안 규칙을 확인하거나, 구글 로그인을 시도해 주세요.');
+      } else {
+        showAlert('사진 추가 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setUploading(prev => ({ ...prev, [topicId]: { current: 0, total: 0 } }));
     }
   };
 
@@ -285,7 +316,6 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
       setUploadProgress({ ...uploadProgress, [topicId]: { current: 0, total: files.length } });
 
       // 파일을 베이스 파일명으로 그룹화
-      // abc.webp와 thumb_abc.webp를 하나의 그룹으로 묶음
       const fileGroups: { [key: string]: { original?: File; thumb?: File } } = {};
       
       for (let i = 0; i < files.length; i++) {
@@ -309,60 +339,71 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
       for (let i = 0; i < baseNames.length; i++) {
         const baseName = baseNames[i];
         const group = fileGroups[baseName];
+        const photoId = baseName.replace(/[^a-zA-Z0-9_-]/g, '_');
         
         let url = '';
         let thumb_url = '';
 
+        // 기존 문서가 있으면 데이터 가져오기
+        const existingPhoto = photos.find(p => p.id === photoId);
+        if (existingPhoto) {
+          url = existingPhoto.url;
+          thumb_url = existingPhoto.thumb_url || '';
+        }
+
         if (group.original) {
-          url = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(group.original!);
-          });
+          const fileName = `${Date.now()}_${group.original.name}`;
+          const storageRef = ref(storage, `gallery/${fileName}`);
+          const snapshot = await uploadBytes(storageRef, group.original);
+          url = await getDownloadURL(snapshot.ref);
           processedFilesCount++;
-          setUploadProgress(prev => ({ ...prev, [topicId]: { current: processedFilesCount, total: files.length } }));
         }
 
         if (group.thumb) {
-          thumb_url = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(group.thumb!);
-          });
+          const fileName = `${Date.now()}_${group.thumb.name}`;
+          const storageRef = ref(storage, `gallery/${fileName}`);
+          const snapshot = await uploadBytes(storageRef, group.thumb);
+          thumb_url = await getDownloadURL(snapshot.ref);
           processedFilesCount++;
-          setUploadProgress(prev => ({ ...prev, [topicId]: { current: processedFilesCount, total: files.length } }));
         }
-
-        const photoId = `photo_${Date.now()}_${i}`;
-        currentMaxOrder++;
         
-        await setDoc(doc(db, 'gallery', topicId, 'photos', photoId), {
-          url: url,
-          thumb_url: thumb_url,
-          caption: '',
-          order: currentMaxOrder,
-          createdAt: serverTimestamp()
-        });
+        setUploadProgress(prev => ({ ...prev, [topicId]: { current: processedFilesCount, total: files.length } }));
+
+        if (existingPhoto) {
+          await updateDoc(doc(db, 'gallery', topicId, 'photos', photoId), {
+            url: url,
+            thumb_url: thumb_url,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          currentMaxOrder++;
+          await setDoc(doc(db, 'gallery', topicId, 'photos', photoId), {
+            url: url,
+            thumb_url: thumb_url,
+            caption: '',
+            order: currentMaxOrder,
+            createdAt: serverTimestamp()
+          });
+        }
 
         // 과부하 방지
         if (i < baseNames.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
 
-      showAlert(`${baseNames.length} 그룹의 사진이 추가되었습니다.`);
-      // 파일 입력 초기화
+      showAlert(`${baseNames.length} 그룹의 사진 정보가 업로드되고 업데이트되었습니다.`);
       if (fileInputRefs.current[topicId]) {
         fileInputRefs.current[topicId]!.value = '';
       }
-      // 진행 상태 초기화
       setUploadProgress(prev => ({ ...prev, [topicId]: { current: 0, total: 0 } }));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Bulk upload error:', error);
-      showAlert('사진 업로드 중 오류가 발생했습니다.');
-      // 오류 발생 시 진행 상태 초기화
+      if (error.code === 'storage/unauthorized') {
+        showAlert('사진 업로드 권한이 없습니다. Firebase Console에서 Storage 보안 규칙을 확인하거나, 구글 로그인을 시도해 주세요.');
+      } else {
+        showAlert('사진 업로드 중 오류가 발생했습니다.');
+      }
       setUploadProgress(prev => ({ ...prev, [topicId]: { current: 0, total: 0 } }));
     }
   };
@@ -448,9 +489,13 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
               onChange={(e) => setGalleryTopicFilter(e.target.value)}
               className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm focus:border-lime outline-none transition-all text-white min-w-[200px]"
             >
-              <option value="all" className="bg-forest">전체</option>
+              <option value="all" className="bg-forest">
+                전체 ({Object.values(photosByTopic).reduce((acc, curr) => acc + curr.length, 0)})
+              </option>
               {galleryTopics.map(topic => (
-                <option key={topic.id} value={topic.id} className="bg-forest">{topic.title}</option>
+                <option key={topic.id} value={topic.id} className="bg-forest">
+                  {topic.title} ({photosByTopic[topic.id]?.length || 0})
+                </option>
               ))}
             </select>
           </div>
@@ -559,12 +604,30 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
                         placeholder="이미지 URL"
                         className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 flex-grow focus:border-lime outline-none transition-all text-sm text-white"
                       />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) addPhoto(topic.id, file);
+                        }}
+                        className="hidden"
+                        id={`single-upload-${topic.id}`}
+                      />
+                      <button 
+                        onClick={() => document.getElementById(`single-upload-${topic.id}`)?.click()}
+                        disabled={uploadProgress[topic.id]?.total > 0}
+                        className="bg-white/10 text-white px-4 py-2 rounded-full font-bold hover:bg-white/20 transition-all text-sm whitespace-nowrap flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {uploadProgress[topic.id]?.total > 0 ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                        선택 업로드
+                      </button>
                       <button 
                         onClick={() => addPhoto(topic.id)}
                         className="bg-lime/20 text-lime px-4 py-2 rounded-full font-bold hover:bg-lime hover:text-forest transition-all text-sm whitespace-nowrap"
                       >
                         <Download size={16} className="inline mr-2" />
-                        업로드
+                        URL로 추가
                       </button>
                     </div>
                     <textarea 

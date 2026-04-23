@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { Plus, Trash2, ImageIcon, X } from 'lucide-react';
+import { Plus, Trash2, ImageIcon, X, Loader2 } from 'lucide-react';
 import { collection, onSnapshot, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useState, useEffect } from 'react';
 
 interface PricingRow {
@@ -25,6 +26,7 @@ interface CoursePricing {
   promotionInfo?: string;
   premiumInfo?: string;
   photoUrl?: string;
+  url?: string;
   address?: string;
   websiteUrl?: string;
   courseNames?: string;
@@ -83,6 +85,7 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
   const [pricingData, setPricingData] = useState<CoursePricing[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Firebase pricing 데이터 로드
   useEffect(() => {
@@ -101,12 +104,15 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
 
   const currentCourse = selectedCourseId ? pricingData.find(c => c.id === selectedCourseId) : null;
 
-  const updateCourseField = (field: keyof CoursePricing, value: any) => {
+  const updateCourseFields = (updates: Partial<CoursePricing>) => {
     if (!selectedCourseId || !currentCourse) return;
     
-    const updatedCourse = { ...currentCourse, [field]: value };
-    const newData = pricingData.map(c => c.id === selectedCourseId ? updatedCourse : c);
-    setPricingData(newData);
+    const updatedCourse = { ...currentCourse, ...updates };
+    setPricingData(prev => prev.map(c => c.id === selectedCourseId ? updatedCourse : c));
+  };
+
+  const updateCourseField = (field: keyof CoursePricing, value: any) => {
+    updateCourseFields({ [field]: value });
   };
 
   const handleSaveCourse = async () => {
@@ -155,6 +161,7 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
       promotionInfo: '',
       premiumInfo: '',
       photoUrl: '',
+      url: '',
       address: '',
       websiteUrl: '',
       courseNames: '',
@@ -275,7 +282,9 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
 
       {/* Course Selection */}
       <div className="glass p-10 rounded-[40px] border border-white/10">
-        <label className="text-[10px] tracking-widest uppercase opacity-40 block mb-3 ml-2">골프장 선택</label>
+        <label className="text-[10px] tracking-widest uppercase opacity-40 block mb-3 ml-2">
+          골프장 선택 ({pricingData.length})
+        </label>
         <select 
           value={selectedCourseId || ''}
           onChange={(e) => setSelectedCourseId(e.target.value)}
@@ -429,7 +438,12 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
                 <input 
                   type="text"
                   value={currentCourse.photoUrl || ''}
-                  onChange={(e) => updateCourseField('photoUrl', e.target.value)}
+                  onChange={(e) => {
+                    updateCourseFields({
+                      photoUrl: e.target.value,
+                      url: e.target.value
+                    });
+                  }}
                   className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 flex-grow focus:border-lime outline-none transition-all text-sm"
                   placeholder="이미지 URL을 입력하거나 파일을 선택하세요"
                 />
@@ -437,26 +451,57 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
                   <input 
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                    disabled={isUploading}
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
                         if (file.size > MAX_FILE_SIZE_BYTES) {
                           showAlert(`이미지 용량이 너무 큽니다. (${MAX_FILE_SIZE_MB * 1000}KB 이하만 가능합니다)`);
                           return;
                         }
-                        const reader = new FileReader();
-                        reader.onloadend = async () => {
-                          const compressed = await compressImage(reader.result as string);
-                          updateCourseField('photoUrl', compressed);
-                        };
-                        reader.readAsDataURL(file);
+                        
+                        setIsUploading(true);
+                        try {
+                          const uniqueFileName = `${Date.now()}_${file.name}`;
+                          const storageRef = ref(storage, `pricing/${uniqueFileName}`);
+                          const snapshot = await uploadBytes(storageRef, file);
+                          const downloadURL = await getDownloadURL(snapshot.ref);
+                          
+                          updateCourseFields({
+                            photoUrl: downloadURL,
+                            url: downloadURL
+                          });
+
+                          // DB에 즉시 저장
+                          if (selectedCourseId) {
+                            await updateDoc(doc(db, 'pricing', selectedCourseId), {
+                              photoUrl: downloadURL,
+                              url: downloadURL
+                            });
+                          }
+                          
+                          showAlert('이미지가 업로드되었으며 DB에 저장되었습니다.');
+                        } catch (error: any) {
+                          console.error('Pricing image upload error:', error);
+                          if (error.code === 'storage/unauthorized') {
+                            showAlert('업로드 권한이 없습니다. Firebase Console 설정을 확인해 주세요.');
+                          } else {
+                            showAlert('이미지 업로드 중 오류가 발생했습니다.');
+                          }
+                        } finally {
+                          setIsUploading(false);
+                          e.target.value = '';
+                        }
                       }
                     }}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                   />
-                  <button className="bg-white/5 border border-white/10 hover:bg-white/10 px-6 py-2 rounded-xl transition-all text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                    <ImageIcon size={18} />
-                    사진 업로드
+                  <button 
+                    disabled={isUploading}
+                    className="bg-white/5 border border-white/10 hover:bg-white/10 px-6 py-2 rounded-xl transition-all text-sm font-bold flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
+                  >
+                    {isUploading ? <Loader2 size={18} className="animate-spin" /> : <ImageIcon size={18} />}
+                    {isUploading ? '업로드 중...' : '사진 업로드'}
                   </button>
                 </div>
               </div>
@@ -465,7 +510,12 @@ export default function AdminPricing({ showAlert, showConfirm }: AdminPricingPro
               <div className="relative w-40 h-24 rounded-xl overflow-hidden border border-white/10 group flex-shrink-0">
                 <img src={currentCourse.photoUrl} alt="Preview" className="w-full h-full object-cover" />
                 <button 
-                  onClick={() => updateCourseField('photoUrl', '')}
+                  onClick={() => {
+                    updateCourseFields({
+                      photoUrl: '',
+                      url: ''
+                    });
+                  }}
                   className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
                 >
                   <X size={20} />

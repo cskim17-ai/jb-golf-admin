@@ -30,7 +30,7 @@ import {
   limit,
   collectionGroup
 } from 'firebase/firestore';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, signInAnonymously, type User } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import * as XLSX from 'xlsx';
 import AdminNotices from '../components/AdminNotices';
@@ -48,6 +48,7 @@ import AdminQuotes from '../components/AdminQuotes';
 import AdminDashboard from '../components/AdminDashboard';
 import AdminNFCTags from '../components/AdminNFCTags';
 import AdminMenuSettings from '../components/AdminMenuSettings';
+import AdminFAQs from '../components/AdminFAQs';
 
 /**
  * Design Philosophy: Admin Dashboard
@@ -186,7 +187,7 @@ interface Chatting {
 }
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pricing' | 'bulkPricing' | 'quotes' | 'notices' | 'booking' | 'golferQuotes' | 'videoGallery' | 'gallery' | 'photoProcessor' | 'chatting' | 'lab' | 'nfcTags' | 'menuSettings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pricing' | 'bulkPricing' | 'quotes' | 'notices' | 'booking' | 'golferQuotes' | 'videoGallery' | 'gallery' | 'photoProcessor' | 'chatting' | 'lab' | 'nfcTags' | 'menuSettings' | 'faqs'>('dashboard');
   const [menuTabs, setMenuTabs] = useState<{id: string, label: string}[]>([
     { id: 'dashboard', label: '대시보드' },
     { id: 'pricing', label: '골프장 정보' },
@@ -202,6 +203,7 @@ export default function Admin() {
     { id: 'chatting', label: '채팅정보관리' },
     { id: 'lab', label: '실험실' },
     { id: 'menuSettings', label: '사용자 설정' },
+    { id: 'faqs', label: 'FAQ 관리' },
   ]);
   const [pricingData, setPricingData] = useState<CoursePricing[]>([]);
   const [quotesData, setQuotesData] = useState<QuoteRequest[]>([]);
@@ -225,6 +227,7 @@ export default function Admin() {
   }>({});
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isStorageDegraded, setIsStorageDegraded] = useState(false);
 
   // Filters
   const [filterName, setFilterName] = useState('');
@@ -258,7 +261,16 @@ export default function Admin() {
     // 1. 직접 통과 비밀번호 (로그인 건너뜀)
     if (directBypassPassword && passwordInput === directBypassPassword) {
       setIsPasswordVerified(true);
-      setUser({ email: 'master@jb-golf.local', displayName: '마스터 관리자' } as any);
+      signInAnonymously(auth).then((result) => {
+        setUser(result.user);
+        setIsStorageDegraded(false);
+      }).catch(err => {
+        console.error("Anonymous sign-in error:", err);
+        if (err.code === 'auth/admin-restricted-operation') {
+          setIsStorageDegraded(true);
+        }
+        setUser({ email: 'master@jb-golf.local', displayName: '마스터 관리자', isAnonymous: true } as any);
+      });
       setFailedAttempts(0);
       return;
     }
@@ -397,6 +409,10 @@ export default function Admin() {
           if (!savedTabs.find(t => t.id === 'menuSettings')) {
             savedTabs.push({ id: 'menuSettings', label: '사용자 설정' });
           }
+
+          if (!savedTabs.find(t => t.id === 'faqs')) {
+            savedTabs.push({ id: 'faqs', label: 'FAQ 관리' });
+          }
           setMenuTabs(savedTabs);
         }
 
@@ -407,11 +423,27 @@ export default function Admin() {
           
           // 만약 allowedUsers 필드가 비어있거나 없으면 자동 로그인 처리
           if (!config.allowedUsers || config.allowedUsers.length === 0) {
-            setUser({ email: 'auto-login@jb-golf.local', displayName: '자동 로그인' } as any);
+            signInAnonymously(auth).then((result) => {
+              setUser(result.user);
+              setIsStorageDegraded(false);
+            }).catch((err) => {
+              if (err.code === 'auth/admin-restricted-operation') {
+                setIsStorageDegraded(true);
+              }
+              setUser({ email: 'auto-login@jb-golf.local', displayName: '자동 로그인', isAnonymous: true } as any);
+            });
           }
         } else {
           // 설정 자체가 없으면 모든 보안 해제 (최초 설정용)
-          setUser({ email: 'setup-admin@jb-golf.local', displayName: '설정 관리자' } as any);
+          signInAnonymously(auth).then((result) => {
+            setUser(result.user);
+            setIsStorageDegraded(false);
+          }).catch((err) => {
+            if (err.code === 'auth/admin-restricted-operation') {
+              setIsStorageDegraded(true);
+            }
+            setUser({ email: 'setup-admin@jb-golf.local', displayName: '설정 관리자', isAnonymous: true } as any);
+          });
         }
         setIsConfigLoaded(true);
       } catch (e) {
@@ -647,6 +679,28 @@ export default function Admin() {
       {/* Main Content */}
       <main className="flex-1 pt-6 pb-24 px-32 max-w-[1600px] mx-auto w-full">
 
+      {isStorageDegraded && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-6 bg-red-500/20 border border-red-500/30 rounded-[30px] flex items-center justify-between gap-6"
+        >
+          <div className="flex items-center gap-4 text-red-400">
+            <AlertCircle size={24} />
+            <div>
+              <p className="font-bold">이미지 업로드 기능이 제한됨 (Firebase 설정 필요)</p>
+              <p className="text-sm opacity-80">Firebase Console → Authentication → Settings → User actions 에서 '사용자가 계정을 만들 수 있도록 허용'을 체크해야 합니다.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => window.open('https://console.firebase.google.com/', '_blank')}
+            className="bg-red-500 text-white px-6 py-2 rounded-xl font-bold text-sm hover:bg-red-600 transition-all shrink-0"
+          >
+            설정하러 가기
+          </button>
+        </motion.div>
+      )}
+
       {/* Content */}
       <AnimatePresence mode="wait">
 
@@ -704,6 +758,10 @@ export default function Admin() {
 
         {activeTab === 'menuSettings' && isPasswordVerified && (
           <AdminMenuSettings showAlert={showAlert} />
+        )}
+
+        {activeTab === 'faqs' && isPasswordVerified && (
+          <AdminFAQs showAlert={showAlert} showConfirm={showConfirm} />
         )}
 
       </AnimatePresence>

@@ -220,8 +220,8 @@ export default function AdminChatting({ showAlert, showConfirm }: AdminChattingP
                   <label className="text-[10px] tracking-widest uppercase opacity-40 block mb-2 ml-2 font-bold">주중 오전 가격 price_wd_am</label>
                   <input 
                     type="number"
-                    value={chattingData.find(c => c.id === selectedChatId)?.price_wd_am || 0}
-                    onChange={(e) => updateChattingField('price_wd_am', parseInt(e.target.value))}
+                    value={chattingData.find(c => c.id === selectedChatId)?.price_wd_am ?? 0}
+                    onChange={(e) => updateChattingField('price_wd_am', parseInt(e.target.value) || 0)}
                     className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 w-full focus:border-lime outline-none transition-all"
                   />
                 </div>
@@ -232,8 +232,8 @@ export default function AdminChatting({ showAlert, showConfirm }: AdminChattingP
                   <label className="text-[10px] tracking-widest uppercase opacity-40 block mb-2 ml-2 font-bold">총 홀 수 total_holes</label>
                   <input 
                     type="number"
-                    value={chattingData.find(c => c.id === selectedChatId)?.total_holes || 18}
-                    onChange={(e) => updateChattingField('total_holes', parseInt(e.target.value))}
+                    value={chattingData.find(c => c.id === selectedChatId)?.total_holes ?? 18}
+                    onChange={(e) => updateChattingField('total_holes', parseInt(e.target.value) || 0)}
                     className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 w-full focus:border-lime outline-none transition-all"
                   />
                 </div>

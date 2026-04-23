@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { Download, Trash2, ImageIcon, X } from 'lucide-react';
+import { Download, Trash2, ImageIcon, X, Loader2 } from 'lucide-react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 
@@ -13,6 +14,7 @@ interface Notice {
   isPinned?: boolean;
   showAsPopup?: boolean;
   imageUrl?: string;
+  url?: string;
   author?: string;
 }
 
@@ -70,12 +72,14 @@ const compressImage = async (dataUrl: string): Promise<string> => {
 export default function AdminNotices({ isSaving, setIsSaving, showAlert, showConfirm }: AdminNoticesProps) {
   const [noticesData, setNoticesData] = useState<Notice[]>([]);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [newNotice, setNewNotice] = useState<Partial<Notice>>({
     title: '',
     content: '',
     isPinned: false,
     showAsPopup: false,
-    imageUrl: ''
+    imageUrl: '',
+    url: ''
   });
 
   useEffect(() => {
@@ -109,7 +113,7 @@ export default function AdminNotices({ isSaving, setIsSaving, showAlert, showCon
         });
         showAlert('공지사항이 등록되었습니다.');
       }
-      setNewNotice({ title: '', content: '', isPinned: false, showAsPopup: false, imageUrl: '' });
+      setNewNotice({ title: '', content: '', isPinned: false, showAsPopup: false, imageUrl: '', url: '' });
       setEditingNoticeId(null);
     } catch (error) {
       console.error("Notice save error:", error);
@@ -194,7 +198,7 @@ export default function AdminNotices({ isSaving, setIsSaving, showAlert, showCon
               <input 
                 type="text"
                 value={newNotice.imageUrl || ''}
-                onChange={(e) => setNewNotice({ ...newNotice, imageUrl: e.target.value })}
+                onChange={(e) => setNewNotice({ ...newNotice, imageUrl: e.target.value, url: e.target.value })}
                 className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex-grow focus:border-lime outline-none transition-all text-sm"
                 placeholder="이미지 URL을 입력하거나 파일을 선택하세요"
               />
@@ -202,26 +206,45 @@ export default function AdminNotices({ isSaving, setIsSaving, showAlert, showCon
                 <input 
                   type="file"
                   accept="image/*"
-                  onChange={(e) => {
+                  disabled={isUploading}
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       if (file.size > MAX_FILE_SIZE_BYTES) {
                         showAlert(`이미지 용량이 너무 큽니다. (${MAX_FILE_SIZE_MB * 1000}KB 이하만 가능합니다)`);
                         return;
                       }
-                      const reader = new FileReader();
-                      reader.onloadend = async () => {
-                        const compressed = await compressImage(reader.result as string);
-                        setNewNotice({ ...newNotice, imageUrl: compressed });
-                      };
-                      reader.readAsDataURL(file);
+                      
+                      setIsUploading(true);
+                      try {
+                        const uniqueFileName = `${Date.now()}_${file.name}`;
+                        const storageRef = ref(storage, `notices/${uniqueFileName}`);
+                        const snapshot = await uploadBytes(storageRef, file);
+                        const downloadURL = await getDownloadURL(snapshot.ref);
+                        
+                        setNewNotice({ ...newNotice, imageUrl: downloadURL, url: downloadURL });
+                        showAlert('이미지가 업로드되었습니다.');
+                      } catch (error: any) {
+                        console.error('Notice image upload error:', error);
+                        if (error.code === 'storage/unauthorized') {
+                          showAlert('업로드 권한이 없습니다. Firebase Console 설정을 확인해 주세요.');
+                        } else {
+                          showAlert('이미지 업로드 중 오류가 발생했습니다.');
+                        }
+                      } finally {
+                        setIsUploading(false);
+                        e.target.value = '';
+                      }
                     }
                   }}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 />
-                <button className="bg-white/5 hover:bg-white/10 border border-white/10 px-6 py-3 rounded-xl transition-all text-sm flex items-center gap-2 whitespace-nowrap">
-                  <ImageIcon size={18} />
-                  파일 선택
+                <button 
+                  disabled={isUploading}
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 px-6 py-3 rounded-xl transition-all text-sm flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
+                >
+                  {isUploading ? <Loader2 size={18} className="animate-spin" /> : <ImageIcon size={18} />}
+                  {isUploading ? '업로드 중...' : '파일 선택'}
                 </button>
               </div>
             </div>
@@ -229,7 +252,7 @@ export default function AdminNotices({ isSaving, setIsSaving, showAlert, showCon
               <div className="mt-4 relative w-32 h-32 rounded-xl overflow-hidden border border-white/10 group">
                 <img src={newNotice.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                 <button 
-                  onClick={() => setNewNotice({ ...newNotice, imageUrl: '' })}
+                  onClick={() => setNewNotice({ ...newNotice, imageUrl: '', url: '' })}
                   className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
                 >
                   <X size={20} />
@@ -298,7 +321,8 @@ export default function AdminNotices({ isSaving, setIsSaving, showAlert, showCon
                         content: notice.content, 
                         isPinned: !!notice.isPinned,
                         showAsPopup: !!notice.showAsPopup,
-                        imageUrl: notice.imageUrl || ''
+                        imageUrl: notice.imageUrl || '',
+                        url: notice.url || notice.imageUrl || ''
                       });
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}

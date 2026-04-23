@@ -29,7 +29,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 3. 전체 데이터베이스 기본 규칙 (Fallback)
+    // 3. FAQ 컬렉션 관리
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 4. 전체 데이터베이스 기본 규칙 (Fallback)
     // 테스트 및 서비스 조회를 위해 읽기는 허용하되, 데이터 변경(쓰기)은 관리자만 가능하도록 통제
     match /{document=**} {
       allow read: if true;
