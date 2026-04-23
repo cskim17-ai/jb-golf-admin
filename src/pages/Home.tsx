@@ -2,6 +2,9 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { LogIn, Settings, BarChart3 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 
 /**
  * Design Philosophy: Landing Page
@@ -12,6 +15,16 @@ import { LogIn, Settings, BarChart3 } from "lucide-react";
 
 export default function Home() {
   const [, navigate] = useLocation();
+  const [logoUrl, setLogoUrl] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'logo'), (snap) => {
+      if (snap.exists()) {
+        setLogoUrl(snap.data().logoUrl || '');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   return (
     <div className="min-h-screen bg-forest text-white flex flex-col">
@@ -19,9 +32,15 @@ export default function Home() {
       <header className="border-b border-white/10 px-6 py-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-lime rounded-lg flex items-center justify-center font-bold text-forest text-xl">
-              JB
-            </div>
+            {logoUrl ? (
+              <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center p-1 bg-white/5 border border-white/10">
+                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 bg-lime rounded-lg flex items-center justify-center font-bold text-forest text-xl">
+                JB
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-bold">JB Golf Admin</h1>
               <p className="text-sm text-white/60">관리 시스템</p>

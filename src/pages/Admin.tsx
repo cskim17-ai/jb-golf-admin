@@ -226,6 +226,17 @@ export default function Admin() {
     allowedUsers?: string[]
   }>({});
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+  const [logoUrl, setLogoUrl] = useState('');
+
+  // Logo loading
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'logo'), (snap) => {
+      if (snap.exists()) {
+        setLogoUrl(snap.data().logoUrl || '');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isStorageDegraded, setIsStorageDegraded] = useState(false);
 
@@ -394,7 +405,8 @@ export default function Admin() {
       try {
         const menuSnap = await getDoc(doc(db, 'settings', 'menuConfig'));
         if (menuSnap.exists()) {
-          let savedTabs = menuSnap.data().tabs as {id: string, label: string}[];
+          let savedTabs = (menuSnap.data().tabs as {id: string, label: string}[])
+            .filter(t => t.id !== 'accessControl'); // 접속 권한 관리 메뉴 삭제
           
           // Photo Processor가 없으면 Gallery 관리 옆에 추가
           if (!savedTabs.find(t => t.id === 'photoProcessor')) {
@@ -635,9 +647,15 @@ export default function Admin() {
         <div className="flex items-center justify-between gap-6">
           {/* Logo */}
           <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="w-10 h-10 bg-lime rounded-lg flex items-center justify-center font-bold text-forest text-lg">
-              JB
-            </div>
+            {logoUrl ? (
+              <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center p-1 bg-white/5 border border-white/10">
+                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-10 h-10 bg-lime rounded-lg flex items-center justify-center font-bold text-forest text-lg">
+                JB
+              </div>
+            )}
             <div>
               <h1 className="text-lg font-bold">JB Golf Admin</h1>
               <p className="text-xs text-white/60">관리 시스템</p>

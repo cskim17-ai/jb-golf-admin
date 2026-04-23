@@ -27,6 +27,7 @@ interface AdminFAQsProps {
 
 export default function AdminFAQs({ showAlert, showConfirm }: AdminFAQsProps) {
   const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('전체');
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -185,6 +186,31 @@ export default function AdminFAQs({ showAlert, showConfirm }: AdminFAQsProps) {
         >
           <Plus size={18} /> 새 질문 추가
         </button>
+      </div>
+
+      {/* Category Filter Bar */}
+      <div className="flex flex-wrap gap-2 p-1.5 bg-white/5 rounded-2xl w-fit">
+        {['전체', ...CATEGORIES].map(cat => {
+          const count = cat === '전체' ? faqs.length : faqs.filter(f => f.category === cat).length;
+          const isActive = selectedCategory === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`
+                px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2
+                ${isActive 
+                  ? 'bg-lime text-forest shadow-[0_0_15px_rgba(163,230,53,0.2)]' 
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'}
+              `}
+            >
+              {cat}
+              <span className={`text-[10px] ${isActive ? 'text-forest/60' : 'text-white/20'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Editor Modal */}
@@ -376,13 +402,13 @@ export default function AdminFAQs({ showAlert, showConfirm }: AdminFAQsProps) {
 
       {/* List */}
       <div className="space-y-4">
-        {faqs.length === 0 ? (
+        {faqs.filter(f => selectedCategory === '전체' || f.category === selectedCategory).length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-[40px] opacity-30">
             <AlertCircle size={40} className="mx-auto mb-4" />
-            등록된 FAQ가 없습니다.
+            {selectedCategory === '전체' ? '등록된 FAQ가 없습니다.' : `'${selectedCategory}' 카테고리에 등록된 질문이 없습니다.`}
           </div>
         ) : (
-          faqs.map(faq => (
+          faqs.filter(f => selectedCategory === '전체' || f.category === selectedCategory).map(faq => (
             <div 
               key={faq.id}
               className={`glass p-6 rounded-[32px] border transition-all ${faq.isActive ? 'border-white/10' : 'border-white/5 opacity-50'}`}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, Reorder } from 'framer-motion';
-import { GripVertical, Save, RefreshCcw, Info, Lock, UserPlus, Trash2, Plus } from 'lucide-react';
+import { GripVertical, Save, RefreshCcw, Info, Lock, UserPlus, Trash2, Plus, Image as ImageIcon, Upload, Loader2, X } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -30,8 +31,7 @@ const ADMIN_TABS: TabConfig[] = [
   { id: 'chatting', label: '채팅정보관리' },
   { id: 'lab', label: '실험실' },
   { id: 'menuSettings', label: '사용자 설정' },
-  { id: 'faqs', label: 'FAQ 관리' },
-  { id: 'accessControl', label: '접속 권한 관리' }
+  { id: 'faqs', label: 'FAQ 관리' }
 ];
 
 const CLIENT_TABS: TabConfig[] = [
@@ -46,7 +46,7 @@ const CLIENT_TABS: TabConfig[] = [
 ];
 
 export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: string) => void }) {
-  const [activeMode, setActiveMode] = useState<'admin' | 'client' | 'access'>('admin');
+  const [activeMode, setActiveMode] = useState<'admin' | 'client' | 'access' | 'logo'>('admin');
   const [adminTabs, setAdminTabs] = useState<TabConfig[]>(ADMIN_TABS);
   const [clientTabs, setClientTabs] = useState<TabConfig[]>(CLIENT_TABS);
   const [adminPassword, setAdminPassword] = useState('');
@@ -54,8 +54,11 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
   const [directBypassPassword, setDirectBypassPassword] = useState('5938');
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -103,6 +106,12 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
           setAllowedUsers(data.allowedUsers || []);
         } else {
           setAllowedUsers([]);
+        }
+
+        // 로고 설정 로드
+        const logoSnap = await getDoc(doc(db, 'settings', 'logo'));
+        if (logoSnap.exists()) {
+          setLogoUrl(logoSnap.data().logoUrl || '');
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -170,6 +179,45 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
     setAllowedUsers(allowedUsers.filter(u => u !== email));
   };
 
+  const handleSaveLogo = async () => {
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'logo'), {
+        logoUrl,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      showAlert('로고이미지가 저장되었습니다.');
+    } catch (error) {
+      console.error("Error saving logo settings:", error);
+      showAlert('저장에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      showAlert('이미지 용량은 2MB를 초과할 수 없습니다.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `common/logo_${Date.now()}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      setLogoUrl(downloadUrl);
+      showAlert('로고 이미지가 업로드되었습니다. [저장] 버튼을 눌러주세요.');
+    } catch (error) {
+      console.error("Logo upload error:", error);
+      showAlert('업로드에 실패했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
   const handleReset = () => {
     if (activeMode === 'admin') setAdminTabs(ADMIN_TABS.map(t => ({ ...t })));
     else setClientTabs(CLIENT_TABS.map(t => ({ ...t })));
@@ -257,9 +305,78 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
         >
           접속 권한 관리
         </button>
+        <button
+          onClick={() => setActiveMode('logo')}
+          className={cn(
+            "flex-1 py-3 rounded-lg text-sm font-bold transition-all",
+            activeMode === 'logo' ? "bg-white/10 text-lime" : "text-white/40 hover:text-white/60"
+          )}
+        >
+          로고이미지
+        </button>
       </div>
 
-      {activeMode === 'access' ? (
+      {activeMode === 'logo' ? (
+        <div className="space-y-6">
+          <div className="glass p-8 rounded-3xl border border-white/5 space-y-8">
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-white mb-2">관리자 페이지 로고 설정</h3>
+              <p className="text-sm text-white/50">좌측 상단에 노출될 로고 이미지를 변경합니다.</p>
+            </div>
+
+            <div className="relative flex flex-col items-center gap-6 p-10 bg-white/5 rounded-3xl border border-dashed border-white/10 group hover:border-lime/30 transition-all">
+              {logoUrl ? (
+                <div className="relative group">
+                  <div className="w-32 h-32 rounded-2xl overflow-hidden bg-forest flex items-center justify-center p-2 border border-white/10">
+                    <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-contain" />
+                  </div>
+                  <button 
+                    onClick={() => setLogoUrl('')}
+                    className="absolute -top-3 -right-3 p-2 bg-red-500 text-white rounded-full hover:scale-110 transition-all shadow-lg"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-32 h-32 rounded-2xl bg-white/5 flex items-center justify-center">
+                  <ImageIcon size={48} className="opacity-20" />
+                </div>
+              )}
+
+              <div className="flex flex-col items-center gap-4">
+                <input 
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleLogoUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="flex items-center gap-2 px-8 py-3 bg-white/10 hover:bg-white/20 rounded-2xl font-bold transition-all text-sm disabled:opacity-50"
+                >
+                  {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                  이미지 업로드
+                </button>
+                <p className="text-xs text-white/30 text-center">
+                  권장 크기: 정방형 또는 가로 비율 (PNG, JPG 추천)<br/>
+                  최대 2MB 이내
+                </p>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleSaveLogo}
+              disabled={isSaving || isUploading}
+              className="w-full py-5 bg-lime text-forest rounded-2xl font-bold text-lg hover:shadow-[0_0_20px_rgba(163,230,53,0.4)] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+            >
+              <Save size={20} />
+              {isSaving ? '저장 중...' : '로고 설정 저장'}
+            </button>
+          </div>
+        </div>
+      ) : activeMode === 'access' ? (
         <div className="space-y-6">
           <div className="glass p-6 rounded-2xl border border-white/5 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -399,11 +516,11 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
           알림 사항
         </h4>
         <ul className="text-xs text-white/50 space-y-1 ml-6 list-disc">
-          {activeMode === 'access' ? (
+          {activeMode === 'access' || activeMode === 'logo' ? (
             <>
               <li><strong>비밀번호:</strong> 관리자 페이지 진입 시 2차 인증용으로 사용됩니다.</li>
               <li><strong>Gmail 목록:</strong> 등록된 이메일로 로그인한 사용자만 대시보드 접근이 가능합니다.</li>
-              <li>저장 버튼을 눌러야 실제 서버에 반영됩니다.</li>
+              <li><strong>로고이미지:</strong> 업로드 후 반드시 [저장] 버튼을 눌러야 반영됩니다.</li>
             </>
           ) : (
             <>
