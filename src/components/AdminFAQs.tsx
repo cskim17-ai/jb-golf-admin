@@ -52,6 +52,16 @@ export default function AdminFAQs({ showAlert, showConfirm }: AdminFAQsProps) {
       })) as FAQ[];
       setFaqs(data);
       setLoading(false);
+    }, (error) => {
+      console.error('FAQ fetching error:', error);
+      setLoading(false);
+      if (error.code === 'permission-denied') {
+        showAlert('데이터 접근 권한이 없습니다. Firebase 보안 규칙을 확인해 주세요.');
+      } else if (error.message.includes('index')) {
+        showAlert('Firestore 인덱스가 필요합니다. 콘솔 로그의 링크를 클릭해 생성해 주세요.');
+      } else {
+        showAlert('데이터를 불러오는 중 오류가 발생했습니다: ' + error.message);
+      }
     });
 
     return () => unsubscribe();
