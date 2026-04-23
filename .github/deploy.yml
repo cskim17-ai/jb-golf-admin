@@ -4,13 +4,18 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # 수동 실행 가능하도록 설정
+  workflow_dispatch: 
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    
+    # 1. 권한 설정 추가 (중요!)
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
-    # Node.js 20 지원 종료 경고를 해결하기 위한 환경 변수 설정
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -21,7 +26,6 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # 현재 안정적인 최신 LTS 버전인 22 또는 24 권장
           node-version: '22'
           cache: 'npm'
 
@@ -31,7 +35,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      # 이후 배포 단계 (GitHub Pages 또는 Firebase 등 설정에 맞게 유지)
-      # 예시: GitHub Pages 배포인 경우
+      # 2. 빌드된 결과물(dist 폴더)을 업로드하는 단계 추가
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist' # Vite를 쓰신다면 보통 dist입니다.
+
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
