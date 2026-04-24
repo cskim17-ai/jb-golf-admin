@@ -50,8 +50,8 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
   const [adminTabs, setAdminTabs] = useState<TabConfig[]>(ADMIN_TABS);
   const [clientTabs, setClientTabs] = useState<TabConfig[]>(CLIENT_TABS);
   const [adminPassword, setAdminPassword] = useState('');
-  const [googleLoginPassword, setGoogleLoginPassword] = useState('9175938');
-  const [directBypassPassword, setDirectBypassPassword] = useState('5938');
+  const [googleLoginPassword, setGoogleLoginPassword] = useState('');
+  const [directBypassPassword, setDirectBypassPassword] = useState('');
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
@@ -101,8 +101,8 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
         if (accessSnap.exists()) {
           const data = accessSnap.data();
           setAdminPassword(data.adminPassword || '');
-          setGoogleLoginPassword(data.googleLoginPassword || '9175938');
-          setDirectBypassPassword(data.directBypassPassword || '5938');
+          setGoogleLoginPassword(data.googleLoginPassword || '');
+          setDirectBypassPassword(data.directBypassPassword || '');
           setAllowedUsers(data.allowedUsers || []);
         } else {
           setAllowedUsers([]);
@@ -389,7 +389,7 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
                   type="password"
                   value={directBypassPassword}
                   onChange={(e) => setDirectBypassPassword(e.target.value)}
-                  placeholder="예: 5938"
+                  placeholder="비밀번호 설정"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-lime outline-none transition-all"
                 />
                 <p className="text-[10px] opacity-40">입력 시 즉시 마스터 권한으로 입장합니다.</p>
@@ -404,7 +404,7 @@ export default function AdminMenuSettings({ showAlert }: { showAlert: (msg: stri
                   type="password"
                   value={googleLoginPassword}
                   onChange={(e) => setGoogleLoginPassword(e.target.value)}
-                  placeholder="예: 9175938"
+                  placeholder="비밀번호 설정"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-lime outline-none transition-all"
                 />
                 <p className="text-[10px] opacity-40">입력 시 구글 로그인 창이 나타납니다.</p>

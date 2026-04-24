@@ -8,7 +8,7 @@ import {
   ChevronLeft, ChevronRight,
   CheckCircle2, AlertCircle, Send, Search,
   Plus, Trash2, ChevronUp, ChevronDown, Image as ImageIcon, Home as HomeIcon, Download, Upload,
-  MessageSquare, RotateCcw, Phone, LogOut, Lock
+  MessageSquare, RotateCcw, Phone, LogOut, Lock, Eye, EyeOff
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -217,7 +217,9 @@ export default function Admin() {
   const [isSaving, setIsSaving] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+  const [isBypassed, setIsBypassed] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [accessConfig, setAccessConfig] = useState<{
     adminPassword?: string, 
@@ -269,9 +271,7 @@ export default function Admin() {
     const googleLoginPassword = accessConfig.googleLoginPassword;
     const targetPassword = accessConfig.adminPassword;
     
-    // 1. 직접 통과 비밀번호 (로그인 건너뜀)
-    if (directBypassPassword && passwordInput === directBypassPassword) {
-      setIsPasswordVerified(true);
+    const performAnonymousLogin = () => {
       signInAnonymously(auth).then((result) => {
         setUser(result.user);
         setIsStorageDegraded(false);
@@ -282,34 +282,57 @@ export default function Admin() {
         }
         setUser({ email: 'master@jb-golf.local', displayName: '마스터 관리자', isAnonymous: true } as any);
       });
-      setFailedAttempts(0);
-      return;
-    }
+    };
 
-    // 2. 구글 로그인 활성화 비밀번호
-    if (googleLoginPassword && passwordInput === googleLoginPassword) {
-      setIsPasswordVerified(true);
-      setFailedAttempts(0);
-      return;
-    }
+    // 1, 2, 3. 입력값이 directBypassPassword, adminPassword, 또는 googleLoginPassword 인 경우의 처리
+    const inputClean = passwordInput.trim();
+    const isBypassMatch = directBypassPassword && inputClean === directBypassPassword.trim();
+    const isAdminMatch = targetPassword && inputClean === targetPassword.trim();
+    const isGooglePassMatch = googleLoginPassword && inputClean === googleLoginPassword.trim();
 
-    // 3. 그 외 비밀번호 처리 (기존 adminPassword 필드 호환용)
-    if (targetPassword && passwordInput === targetPassword) {
-      setIsPasswordVerified(true);
+    if (isBypassMatch || isAdminMatch || isGooglePassMatch) {
       setFailedAttempts(0);
-    } else {
-      const newAttempts = failedAttempts + 1;
-      setFailedAttempts(newAttempts);
-      setPasswordInput('');
       
-      if (newAttempts >= 5) {
-        showAlert('비밀번호를 5회 틀렸습니다. 야나골 사이트로 이동합니다.');
-        setTimeout(() => {
-          window.location.href = "https://cskim17-ai.github.io/jb-golf/";
-        }, 1500);
+      // 구글 로그인 활성화 여부 체크: googleLoginPassword 필드에 값이 있는 경우
+      const isGoogleAuthActive = googleLoginPassword && googleLoginPassword.trim().length > 0;
+
+      if (isGoogleAuthActive) {
+        // 구글 로그인 설정이 있는 경우: 입력한 비번에 상관없이 구글 2차 인증 과정을 거침
+        setIsBypassed(false);
+        setIsPasswordVerified(true);
+        
+        // 구글 로그인 창 노출을 위해 현재 유저 상태 초기화 및 팝업 유도
+        if (auth.currentUser) {
+          signOut(auth).then(() => {
+            setUser(null);
+            handleGoogleLogin();
+          }).catch(() => {
+            setUser(null);
+            handleGoogleLogin();
+          });
+        } else {
+          setUser(null);
+          handleGoogleLogin();
+        }
       } else {
-        showAlert(`비밀번호가 올바르지 않습니다. (현재 오류 횟수: ${newAttempts}/5)`);
+        // 구글 로그인 설정이 없는 경우: 즉시 진입 (Bypass 허용)
+        setIsBypassed(true);
+        setIsPasswordVerified(true);
+        performAnonymousLogin();
       }
+      return;
+    }
+
+    // 실패 처리
+    const newAttempts = failedAttempts + 1;
+    setPasswordInput('');
+    
+    if (newAttempts >= 5) {
+      setFailedAttempts(0);
+      showAlert('관리자에게 문의해 주세요.');
+    } else {
+      setFailedAttempts(newAttempts);
+      showAlert(`비밀번호가 올바르지 않습니다. (현재 오류 횟수: ${newAttempts}/5)`);
     }
   };
 
@@ -318,16 +341,18 @@ export default function Admin() {
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
       const result = await signInWithPopup(auth, provider);
-      const email = result.user.email;
-      const allowedList = accessConfig.allowedUsers || [];
+      const email = result.user.email?.toLowerCase().trim();
+      const allowedList = (accessConfig.allowedUsers || []).map(u => u.toLowerCase().trim());
       
       if (email && allowedList.includes(email)) {
         setUser(result.user);
+        setIsPasswordVerified(true); // 구글 로그인 성공 시 암호 인증도 통과된 것으로 간주
         setActiveTab('dashboard');
       } else {
-        showAlert('관리자에게 문의해 주세요 (등록되지 않은 계정: ' + email + ')');
+        showAlert('관리자에게 문의해 주세요.');
         await signOut(auth);
         setUser(null);
+        setIsPasswordVerified(false); // 다시 관리자 로그인 암호창이 나오도록 함
       }
     } catch (error: any) {
       console.error('Google Login Error:', error);
@@ -433,28 +458,50 @@ export default function Admin() {
           const config = accessSnap.data();
           setAccessConfig(config);
           
-          // 만약 allowedUsers 필드가 비어있거나 없으면 자동 로그인 처리
-          if (!config.allowedUsers || config.allowedUsers.length === 0) {
+          // 암호 설정(adminPassword 또는 directBypassPassword)이 아예 없는 경우 자동 로그인 처리
+          const adminPass = (config.adminPassword || '').trim();
+          const bypassPass = (config.directBypassPassword || '').trim();
+          const googlePass = (config.googleLoginPassword || '').trim();
+          
+          const hasPasswordConfig = adminPass.length > 0 || bypassPass.length > 0;
+          const isGoogleAuthActive = googlePass.length > 0;
+
+          // 1. 관리자 암호(adminPassword)가 없는 경우 바로 인증 통과 처리
+          if (adminPass.length === 0) {
+            setIsPasswordVerified(true);
+            if (isGoogleAuthActive) {
+              // 구글 2차 인증이 필요한 경우 (암호창만 건너뜀)
+              setIsBypassed(false);
+            } else {
+              // 구글 인증도 필요 없는 경우 바로 로그인 처리
+              setIsBypassed(true);
+              signInAnonymously(auth).then((result) => {
+                setUser(result.user);
+              });
+            }
+          } 
+          // 2. 그 외 (암호는 있지만) 허용 사용자도 없고 구글로그인 설정도 없는 경우 자동 로그인
+          else if (!hasPasswordConfig && (!config.allowedUsers || config.allowedUsers.length === 0) && !isGoogleAuthActive) {
             signInAnonymously(auth).then((result) => {
               setUser(result.user);
+              setIsPasswordVerified(true);
+              setIsBypassed(true);
               setIsStorageDegraded(false);
             }).catch((err) => {
               if (err.code === 'auth/admin-restricted-operation') {
                 setIsStorageDegraded(true);
               }
               setUser({ email: 'auto-login@jb-golf.local', displayName: '자동 로그인', isAnonymous: true } as any);
+              setIsPasswordVerified(true);
+              setIsBypassed(true);
             });
           }
         } else {
-          // 설정 자체가 없으면 모든 보안 해제 (최초 설정용)
+          // 설정 자체가 없으면 보안 해제
           signInAnonymously(auth).then((result) => {
             setUser(result.user);
+            setIsPasswordVerified(true);
             setIsStorageDegraded(false);
-          }).catch((err) => {
-            if (err.code === 'auth/admin-restricted-operation') {
-              setIsStorageDegraded(true);
-            }
-            setUser({ email: 'setup-admin@jb-golf.local', displayName: '설정 관리자', isAnonymous: true } as any);
           });
         }
         setIsConfigLoaded(true);
@@ -465,44 +512,51 @@ export default function Admin() {
     };
     fetchConfigs();
 
-    return () => {
-      unsubscribePricing();
-      unsubscribeQuotes();
-      unsubscribeNotices();
-      unsubscribeGolferQuotes();
-    };
-  }, []);
-
-  /* Firebase 인증 상태 감시 주석 처리
-  useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        const email = currentUser.email;
-        let allowedList = accessConfig.allowedUsers;
+        const email = currentUser.email?.toLowerCase().trim();
         
-        // 만약 accessConfig가 아직 로드되지 않았다면 직접 가져옴
+        // accessConfig 로드 대기
+        let allowedList = accessConfig.allowedUsers;
         if (!allowedList) {
-          const accessSnap = await getDoc(doc(db, 'settings', 'accessConfig'));
-          if (accessSnap.exists()) {
-            allowedList = accessSnap.data().allowedUsers;
+          try {
+            const accessSnap = await getDoc(doc(db, 'settings', 'accessConfig'));
+            if (accessSnap.exists()) {
+              allowedList = accessSnap.data().allowedUsers || [];
+            }
+          } catch (err) {
+            console.error("Auth reload config fetch error:", err);
           }
         }
         
-        const finalAllowedList = allowedList || [];
+        const finalAllowedList = (allowedList || []).map(u => u.toLowerCase().trim());
         
         if (email && finalAllowedList.includes(email)) {
           setUser(currentUser);
+          // 보안을 위해 새로고침 시에는 setIsPasswordVerified(true)를 여기서 호출하지 않음
+          // 사용자가 암호를 먼저 입력해야 함. (단, 이미 암호를 입력한 상태라면 유지됨)
+        } else if (currentUser.isAnonymous) {
+          setUser(currentUser);
+          // 익명 로그인 역시 새로고침 시 암호창을 거치도록 유지
         } else {
+          // 허용되지 않은 구글 계정인 경우 로그아웃
           setUser(null);
-          if (email) showAlert('관리자에게 문의해 주세요 (등록되지 않은 계정: ' + email + ')');
+          setIsPasswordVerified(false);
+          await signOut(auth);
         }
       } else {
         setUser(null);
       }
     });
-    return () => unsubscribeAuth();
+
+    return () => {
+      unsubscribePricing();
+      unsubscribeQuotes();
+      unsubscribeNotices();
+      unsubscribeGolferQuotes();
+      unsubscribeAuth();
+    };
   }, [accessConfig.allowedUsers]);
-  */
 
   useEffect(() => {
     fetchData();
@@ -554,14 +608,24 @@ export default function Admin() {
           <p className="text-sm opacity-60 mb-8 font-medium">관리자 전용 비밀번호를 입력해 주세요</p>
           
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <input 
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:border-lime outline-none transition-all text-center tracking-[0.5em] text-white text-xl font-bold"
-              placeholder="••••••"
-              autoFocus
-            />
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"}
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 pr-12 focus:border-lime outline-none transition-all text-center tracking-[0.5em] text-white text-xl font-bold"
+                placeholder="••••••"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                title={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
             <button 
               type="submit"
               className="w-full py-4 bg-lime text-forest rounded-xl font-bold hover:shadow-[0_0_20px_rgba(163,230,53,0.3)] transition-all"
@@ -572,7 +636,7 @@ export default function Admin() {
 
           {failedAttempts > 0 && (
             <p className="mt-4 text-xs text-red-400 font-bold">
-              비밀번호 오류: {failedAttempts}/5회 (5회 초과 시 강제 이동)
+              비밀번호 오류: {failedAttempts}/5회
             </p>
           )}
         </div>
@@ -580,26 +644,43 @@ export default function Admin() {
     );
   }
 
-  // 2순위: 구글 로그인창 (비밀번호가 9175938 일 때 보여짐)
-  if (!user) {
-    return (
-      <div className="pt-40 pb-24 px-6 text-center min-h-screen flex items-center justify-center bg-forest">
-        <div className="glass max-w-md w-full p-12 rounded-[30px] border border-white/10">
-          <div className="w-16 h-16 rounded-full bg-lime/10 flex items-center justify-center mx-auto mb-6">
-            <LogOut className="text-lime" size={32} />
-          </div>
-          <h2 className="text-2xl serif mb-4 text-white font-bold">관리자 로그인</h2>
-          <p className="text-sm opacity-60 mb-8 font-medium">허용된 Gmail 계정으로 로그인해 주세요</p>
-          
-          <button 
-            onClick={handleGoogleLogin}
-            className="w-full py-4 bg-lime text-forest rounded-xl font-bold hover:shadow-[0_0_20px_rgba(163,230,53,0.3)] transition-all flex items-center justify-center gap-3"
-          >
-            <HomeIcon size={20} />
-            Google 로그인
-          </button>
+  // 2순위: 구글 로그인창 (비밀번호 인증 후 구글 2차 인증이 필요한 경우)
+  if (!isBypassed && (!user || user.isAnonymous)) {
+    // 만약 구글 로그인이 설정되어 있는데 현재 익명이거나 로그인이 안되어 있다면
+    const googlePass = (accessConfig.googleLoginPassword || '').trim();
+    const isGoogleAuthActive = googlePass.length > 0;
 
-          {authError && (
+    if (isGoogleAuthActive && (!user || user.isAnonymous)) {
+      return (
+        <div className="pt-40 pb-24 px-6 text-center min-h-screen flex items-center justify-center bg-forest">
+          <div className="glass max-w-md w-full p-12 rounded-[30px] border border-white/10">
+            <div className="w-16 h-16 rounded-full bg-lime/10 flex items-center justify-center mx-auto mb-6">
+              <LogOut className="text-lime" size={32} />
+            </div>
+            <h2 className="text-2xl serif mb-4 text-white font-bold">2차 구글 인증</h2>
+            <p className="text-sm opacity-60 mb-8 font-medium">허용된 Gmail 계정으로 로그인해 주세요</p>
+            
+            <button 
+              onClick={handleGoogleLogin}
+              className="w-full py-4 bg-lime text-forest rounded-xl font-bold hover:shadow-[0_0_20px_rgba(163,230,53,0.3)] transition-all flex items-center justify-center gap-3"
+            >
+              <ImageIcon size={20} />
+              Google 계정 선택
+            </button>
+            
+            <button
+              onClick={() => {
+                setIsPasswordVerified(false);
+                setIsBypassed(false);
+                setUser(null);
+                signOut(auth);
+              }}
+              className="mt-6 text-xs text-white/40 hover:text-white transition-all font-medium"
+            >
+              인증창으로 돌아가기
+            </button>
+
+            {authError && (
             <div className="mt-8 p-5 bg-red-500/10 border border-red-500/30 rounded-2xl text-left animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-2 text-red-500 font-bold mb-3">
                 <AlertCircle size={18} />
@@ -638,6 +719,7 @@ export default function Admin() {
         </div>
       </div>
     );
+    }
   }
 
   return (
