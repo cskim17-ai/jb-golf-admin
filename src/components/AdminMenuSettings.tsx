@@ -21,7 +21,6 @@ const ADMIN_TABS: TabConfig[] = [
   { id: 'pricing', label: '골프장 정보' },
   { id: 'bulkPricing', label: '일괄 가격 수정' },
   { id: 'quotes', label: '문의 내역' },
-  { id: 'booking', label: '예약요청 관리' },
   { id: 'notices', label: '공지사항 관리' },
   { id: 'golferQuotes', label: '골퍼 명언 모음' },
   { id: 'videoGallery', label: '동영상 관리' },
@@ -31,7 +30,8 @@ const ADMIN_TABS: TabConfig[] = [
   { id: 'chatting', label: '채팅정보관리' },
   { id: 'lab', label: '실험실' },
   { id: 'menuSettings', label: '사용자 설정' },
-  { id: 'faqs', label: 'FAQ 관리' }
+  { id: 'faqs', label: 'FAQ 관리' },
+  { id: 'users', label: '회원 정보' }
 ];
 
 const CLIENT_TABS: TabConfig[] = [
@@ -41,7 +41,6 @@ const CLIENT_TABS: TabConfig[] = [
   { id: 'activities', label: '할거리' },
   { id: 'relax', label: '휴식거리' },
   { id: 'pricing', label: '가격표' },
-  { id: 'booking', label: '예약하기' },
   { id: 'gallery', label: '갤러리' }
 ];
 

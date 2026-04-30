@@ -40,7 +40,6 @@ import AdminGallery from '../components/AdminGallery';
 import AdminChatting from '../components/AdminChatting';
 import AdminLab from '../components/AdminLab';
 import AdminPricing from '../components/AdminPricing';
-import AdminBooking from '../components/AdminBooking';
 import AdminPhotoProcessor from '../components/AdminPhotoProcessor';
 
 import AdminBulkPricing from '../components/AdminBulkPricing';
@@ -49,6 +48,7 @@ import AdminDashboard from '../components/AdminDashboard';
 import AdminNFCTags from '../components/AdminNFCTags';
 import AdminMenuSettings from '../components/AdminMenuSettings';
 import AdminFAQs from '../components/AdminFAQs';
+import AdminUsers from '../components/AdminUsers';
 
 /**
  * Design Philosophy: Admin Dashboard
@@ -187,13 +187,13 @@ interface Chatting {
 }
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pricing' | 'bulkPricing' | 'quotes' | 'notices' | 'booking' | 'golferQuotes' | 'videoGallery' | 'gallery' | 'photoProcessor' | 'chatting' | 'lab' | 'nfcTags' | 'menuSettings' | 'faqs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pricing' | 'bulkPricing' | 'quotes' | 'notices' | 'golferQuotes' | 'videoGallery' | 'gallery' | 'photoProcessor' | 'chatting' | 'lab' | 'nfcTags' | 'menuSettings' | 'faqs' | 'users'>('dashboard');
   const [menuTabs, setMenuTabs] = useState<{id: string, label: string}[]>([
     { id: 'dashboard', label: '대시보드' },
+    { id: 'users', label: '회원 정보' },
     { id: 'pricing', label: '골프장 정보' },
     { id: 'bulkPricing', label: '일괄 가격 수정' },
     { id: 'quotes', label: '문의 내역' },
-    { id: 'booking', label: '예약요청 관리' },
     { id: 'notices', label: '공지사항 관리' },
     { id: 'golferQuotes', label: '골퍼 명언 모음' },
     { id: 'videoGallery', label: '동영상 관리' },
@@ -247,6 +247,7 @@ export default function Admin() {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [selectedQuote, setSelectedQuote] = useState<QuoteRequest | null>(null);
+  const [quoteFilter, setQuoteFilter] = useState<{ name?: string; uid?: string } | null>(null);
 
   // Modal state
   const [modal, setModal] = useState<{
@@ -257,6 +258,11 @@ export default function Admin() {
 
   const showAlert = useCallback((message: string) => {
     setModal({ type: 'alert', message });
+  }, []);
+
+  const handleNavigateToQuotes = useCallback((uid: string, name?: string) => {
+    setQuoteFilter({ uid, name });
+    setActiveTab('quotes');
   }, []);
 
   const showConfirm = useCallback((message: string, onConfirm: () => void) => {
@@ -433,7 +439,7 @@ export default function Admin() {
         const menuSnap = await getDoc(doc(db, 'settings', 'menuConfig'));
         if (menuSnap.exists()) {
           let savedTabs = (menuSnap.data().tabs as {id: string, label: string}[])
-            .filter(t => t.id !== 'accessControl'); // 접속 권한 관리 메뉴 삭제
+            .filter(t => t.id !== 'accessControl' && t.id !== 'booking'); // 접속 권한 관리 및 예약요청 관리 메뉴 삭제
           
           // Photo Processor가 없으면 Gallery 관리 옆에 추가
           if (!savedTabs.find(t => t.id === 'photoProcessor')) {
@@ -451,6 +457,14 @@ export default function Admin() {
 
           if (!savedTabs.find(t => t.id === 'faqs')) {
             savedTabs.push({ id: 'faqs', label: 'FAQ 관리' });
+          }
+          if (!savedTabs.find(t => t.id === 'users')) {
+            const dashboardIndex = savedTabs.findIndex(t => t.id === 'dashboard');
+            if (dashboardIndex !== -1) {
+              savedTabs.splice(dashboardIndex + 1, 0, { id: 'users', label: '회원 정보' });
+            } else {
+              savedTabs.unshift({ id: 'users', label: '회원 정보' });
+            }
           }
           setMenuTabs(savedTabs);
         }
@@ -812,7 +826,13 @@ export default function Admin() {
 
         {activeTab === 'bulkPricing' && isPasswordVerified && <AdminBulkPricing showAlert={showAlert} showConfirm={showConfirm} />}
 
-        {activeTab === 'quotes' && isPasswordVerified && <AdminQuotes showAlert={showAlert} showConfirm={showConfirm} />}
+        {activeTab === 'quotes' && isPasswordVerified && (
+          <AdminQuotes 
+            showAlert={showAlert} 
+            showConfirm={showConfirm} 
+            initialFilter={quoteFilter}
+          />
+        )}
 
         {activeTab === 'notices' && isPasswordVerified && (
           <AdminNotices 
@@ -850,10 +870,6 @@ export default function Admin() {
           <AdminLab showAlert={showAlert} showConfirm={showConfirm} />
         )}
 
-        {activeTab === 'booking' && isPasswordVerified && (
-          <AdminBooking showAlert={showAlert} showConfirm={showConfirm} />
-        )}
-
         {activeTab === 'nfcTags' && isPasswordVerified && (
           <AdminNFCTags showAlert={showAlert} showConfirm={showConfirm} />
         )}
@@ -864,6 +880,13 @@ export default function Admin() {
 
         {activeTab === 'faqs' && isPasswordVerified && (
           <AdminFAQs showAlert={showAlert} showConfirm={showConfirm} />
+        )}
+
+        {activeTab === 'users' && isPasswordVerified && (
+          <AdminUsers 
+            showAlert={showAlert} 
+            onViewQuotes={handleNavigateToQuotes}
+          />
         )}
 
       </AnimatePresence>

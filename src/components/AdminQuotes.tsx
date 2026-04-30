@@ -25,6 +25,7 @@ interface QuoteRequest {
 interface AdminQuotesProps {
   showAlert: (message: string) => void;
   showConfirm: (message: string, callback: () => void) => void;
+  initialFilter?: { name?: string; uid?: string } | null;
 }
 
 const safeFormat = (date: any, formatStr: string, fallback: string = '-') => {
@@ -38,13 +39,22 @@ const safeFormat = (date: any, formatStr: string, fallback: string = '-') => {
   }
 };
 
-export default function AdminQuotes({ showAlert, showConfirm }: AdminQuotesProps) {
-  const [quotesData, setQuotesData] = useState<QuoteRequest[]>([]);
-  const [filterName, setFilterName] = useState('');
+export default function AdminQuotes({ showAlert, showConfirm, initialFilter }: AdminQuotesProps) {
+  const [quotesData, setQuotesData] = useState<any[]>([]);
+  const [filterName, setFilterName] = useState(initialFilter?.name || '');
+  const [filterUid, setFilterUid] = useState(initialFilter?.uid || '');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [loading, setLoading] = useState(true);
-  const [selectedQuote, setSelectedQuote] = useState<QuoteRequest | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<any | null>(null);
+
+  // Synchronize internal filter state when prop changes
+  useEffect(() => {
+    if (initialFilter) {
+      if (initialFilter.name !== undefined) setFilterName(initialFilter.name);
+      if (initialFilter.uid !== undefined) setFilterUid(initialFilter.uid);
+    }
+  }, [initialFilter]);
 
   // Firebase quotes 데이터 로드
   useEffect(() => {
@@ -63,7 +73,8 @@ export default function AdminQuotes({ showAlert, showConfirm }: AdminQuotesProps
   }, [showAlert]);
 
   const filteredQuotes = quotesData.filter(quote => {
-    const matchName = quote.from_name?.toLowerCase().includes(filterName.toLowerCase());
+    const matchName = !filterName || quote.from_name?.toLowerCase().includes(filterName.toLowerCase());
+    const matchUid = !filterUid || (quote.userId === filterUid || quote.uid === filterUid);
     
     let matchDate = true;
     if (filterStartDate || filterEndDate) {
@@ -74,7 +85,7 @@ export default function AdminQuotes({ showAlert, showConfirm }: AdminQuotesProps
       matchDate = quoteDate >= startDate && quoteDate <= endDate;
     }
 
-    return matchName && matchDate;
+    return matchName && matchUid && matchDate;
   });
 
   const handleStatusChange = async (quoteId: string, newStatus: string) => {
@@ -196,6 +207,7 @@ export default function AdminQuotes({ showAlert, showConfirm }: AdminQuotesProps
         <button 
           onClick={() => {
             setFilterName('');
+            setFilterUid('');
             setFilterStartDate('');
             setFilterEndDate('');
           }}
