@@ -36,43 +36,58 @@ export default function AdminVideoGallery({ showAlert, showConfirm }: AdminVideo
   // 주제 목록 로드 및 각 주제의 동영상 로드
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'videoGallery'), async (snapshot) => {
+      if (snapshot.empty) {
+        setVideoTopics([]);
+        setVideosByTopic({});
+        setLoading(false);
+        return;
+      }
       const topics: VideoTopic[] = [];
       const topicsData: { [key: string]: VideoItem[] } = {};
 
-      // 각 주제 문서에 대해 서브컬렉션의 동영상 로드
-      for (const topicDoc of snapshot.docs) {
-        const data = topicDoc.data();
-        topics.push({
-          id: topicDoc.id,
-          title: data.title || '새 주제',
-          order: data.order || 0
-        });
+      try {
+        // 각 주제 문서에 대해 서브컬렉션의 동영상 로드
+        for (const topicDoc of snapshot.docs) {
+          const data = topicDoc.data();
+          topics.push({
+            id: topicDoc.id,
+            title: data.title || '새 주제',
+            order: data.order || 0
+          });
 
-        // 서브컬렉션에서 동영상 로드
-        try {
-          const videosSnapshot = await getDocs(collection(db, 'videoGallery', topicDoc.id, 'videos'));
-          const videos: VideoItem[] = videosSnapshot.docs.map(videoDoc => ({
-            id: videoDoc.id,
-            url: videoDoc.data().url || '',
-            title: videoDoc.data().title || '',
-            description: videoDoc.data().description || '',
-            order: videoDoc.data().order || 0
-          })).sort((a, b) => (a.order || 0) - (b.order || 0));
-          
-          topicsData[topicDoc.id] = videos;
-        } catch (error) {
-          console.error('Error loading videos for topic:', topicDoc.id, error);
-          topicsData[topicDoc.id] = [];
+          // 서브컬렉션에서 동영상 로드
+          try {
+            const videosSnapshot = await getDocs(collection(db, 'videoGallery', topicDoc.id, 'videos'));
+            const videos: VideoItem[] = videosSnapshot.docs.map(videoDoc => ({
+              id: videoDoc.id,
+              url: videoDoc.data().url || '',
+              title: videoDoc.data().title || '',
+              description: videoDoc.data().description || '',
+              order: videoDoc.data().order || 0
+            })).sort((a, b) => (a.order || 0) - (b.order || 0));
+            
+            topicsData[topicDoc.id] = videos;
+          } catch (error) {
+            console.error('Error loading videos for topic:', topicDoc.id, error);
+            topicsData[topicDoc.id] = [];
+          }
         }
-      }
 
-      setVideoTopics(topics.sort((a, b) => (a.order || 0) - (b.order || 0)));
-      setVideosByTopic(topicsData);
+        setVideoTopics(topics.sort((a, b) => (a.order || 0) - (b.order || 0)));
+        setVideosByTopic(topicsData);
+        setLoading(false);
+      } catch (error) {
+        console.error('Snapshot processing error:', error);
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error('onSnapshot videoGallery error:', error);
+      showAlert('동영상 갤러리 데이터를 불러오는데 실패했습니다.');
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [showAlert]);
 
   const toggleTopic = (topicId: string) => {
     const newExpanded = new Set(expandedTopics);
@@ -321,7 +336,7 @@ export default function AdminVideoGallery({ showAlert, showConfirm }: AdminVideo
               className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm focus:border-lime outline-none transition-all text-white min-w-[200px]"
             >
               <option value="all" className="bg-forest">
-                전체 ({Object.values(videosByTopic).reduce((acc, curr) => acc + curr.length, 0)})
+                전체 ({Object.values(videosByTopic).reduce((acc: number, curr: VideoItem[]) => acc + (curr?.length || 0), 0)})
               </option>
               {videoTopics.map(topic => (
                 <option key={topic.id} value={topic.id} className="bg-forest">

@@ -255,13 +255,13 @@ export default function Admin() {
     onConfirm?: () => void;
   }>({ type: null, message: '' });
 
-  const showAlert = (message: string) => {
+  const showAlert = useCallback((message: string) => {
     setModal({ type: 'alert', message });
-  };
+  }, []);
 
-  const showConfirm = (message: string, onConfirm: () => void) => {
+  const showConfirm = useCallback((message: string, onConfirm: () => void) => {
     setModal({ type: 'confirm', message, onConfirm });
-  };
+  }, []);
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -371,7 +371,9 @@ export default function Admin() {
         await signOut(auth);
       }
       setUser(null);
-      window.location.href = '/';
+      setIsPasswordVerified(false);
+      setIsBypassed(false);
+      setPasswordInput('');
     } catch (error) {
       console.error('Logout Error:', error);
     }

@@ -42,43 +42,58 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
 
   // Firebase 갤러리 데이터 로드 - 서브컬렉션 구조
   useEffect(() => {
-    const loadGalleryData = async () => {
+    const loadGalleryData = () => {
       try {
-        setLoading(true);
+        // Only set loading true if it's the very first time
         const unsubscribe = onSnapshot(collection(db, 'gallery'), async (topicsSnapshot) => {
+          if (topicsSnapshot.empty) {
+            setGalleryTopics([]);
+            setPhotosByTopic({});
+            setLoading(false);
+            return;
+          }
           const topics: GalleryTopic[] = [];
           const topicsData: { [key: string]: GalleryPhoto[] } = {};
 
-          // 각 주제 문서에 대해 서브컬렉션의 사진 로드
-          for (const topicDoc of topicsSnapshot.docs) {
-            const data = topicDoc.data();
-            topics.push({
-              id: topicDoc.id,
-              title: data.title || '새 주제',
-              order: data.order || 0
-            });
+          try {
+            // 각 주제 문서에 대해 서브컬렉션의 사진 로드
+            for (const topicDoc of topicsSnapshot.docs) {
+              const data = topicDoc.data();
+              topics.push({
+                id: topicDoc.id,
+                title: data.title || '새 주제',
+                order: data.order || 0
+              });
 
-            // 서브컬렉션에서 사진 로드
-            try {
-              const photosSnapshot = await getDocs(collection(db, 'gallery', topicDoc.id, 'photos'));
-              const photos: GalleryPhoto[] = photosSnapshot.docs.map(photoDoc => ({
-                id: photoDoc.id,
-                url: photoDoc.data().url || '',
-                caption: photoDoc.data().caption || '',
-                thumb_url: photoDoc.data().thumb_url || '',
-                order: photoDoc.data().order || 0,
-                createdAt: photoDoc.data().createdAt
-              })).sort((a, b) => (a.order || 0) - (b.order || 0));
-              
-              topicsData[topicDoc.id] = photos;
-            } catch (error) {
-              console.error('Error loading photos for topic:', topicDoc.id, error);
-              topicsData[topicDoc.id] = [];
+              // 서브컬렉션에서 사진 로드
+              try {
+                const photosSnapshot = await getDocs(collection(db, 'gallery', topicDoc.id, 'photos'));
+                const photos: GalleryPhoto[] = photosSnapshot.docs.map(photoDoc => ({
+                  id: photoDoc.id,
+                  url: photoDoc.data().url || '',
+                  caption: photoDoc.data().caption || '',
+                  thumb_url: photoDoc.data().thumb_url || '',
+                  order: photoDoc.data().order || 0,
+                  createdAt: photoDoc.data().createdAt
+                })).sort((a, b) => (a.order || 0) - (b.order || 0));
+                
+                topicsData[topicDoc.id] = photos;
+              } catch (error) {
+                console.error('Error loading photos for topic:', topicDoc.id, error);
+                topicsData[topicDoc.id] = [];
+              }
             }
-          }
 
-          setGalleryTopics(topics.sort((a, b) => (a.order || 0) - (b.order || 0)));
-          setPhotosByTopic(topicsData);
+            setGalleryTopics(topics.sort((a, b) => (a.order || 0) - (b.order || 0)));
+            setPhotosByTopic(topicsData);
+            setLoading(false);
+          } catch (error) {
+            console.error('Snapshot processing error:', error);
+            setLoading(false);
+          }
+        }, (error) => {
+          console.error('onSnapshot gallery error:', error);
+          showAlert('갤러리 데이터를 실시간으로 불러오는데 실패했습니다.');
           setLoading(false);
         });
 
@@ -175,7 +190,7 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
       return;
     }
 
-    setUploading(prev => ({ ...prev, [topicId]: { current: 0, total: 1 } }));
+    setUploadProgress(prev => ({ ...prev, [topicId]: { current: 0, total: 1 } }));
 
     try {
       const photos = photosByTopic[topicId] || [];
@@ -226,7 +241,7 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
         showAlert('사진 추가 중 오류가 발생했습니다.');
       }
     } finally {
-      setUploading(prev => ({ ...prev, [topicId]: { current: 0, total: 0 } }));
+      setUploadProgress(prev => ({ ...prev, [topicId]: { current: 0, total: 0 } }));
     }
   };
 
@@ -490,7 +505,7 @@ export default function AdminGallery({ showAlert, showConfirm }: AdminGalleryPro
               className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm focus:border-lime outline-none transition-all text-white min-w-[200px]"
             >
               <option value="all" className="bg-forest">
-                전체 ({Object.values(photosByTopic).reduce((acc, curr) => acc + curr.length, 0)})
+                전체 ({Object.values(photosByTopic).reduce((acc: number, curr: GalleryPhoto[]) => acc + (curr?.length || 0), 0)})
               </option>
               {galleryTopics.map(topic => (
                 <option key={topic.id} value={topic.id} className="bg-forest">
